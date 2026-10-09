@@ -78,8 +78,11 @@ def load_model():
     
     features = ['Prob_H', 'Prob_D', 'Prob_A', 'AHh', 'Prob_AH_Home', 'Prob_Over25', 'Prob_Under25', 'HomeTeam_Code', 'AwayTeam_Code']
     X = df[features]
-    model_home = xgb.XGBRegressor(n_estimators=200, learning_rate=0.03, max_depth=5, random_state=42).fit(X, df['FTHG'])
-    model_away = xgb.XGBRegressor(n_estimators=200, learning_rate=0.03, max_depth=5, random_state=42).fit(X, df['FTAG'])
+    model_home = xgb.XGBRegressor()
+model_home.load_model('model_home.json')
+
+model_away = xgb.XGBRegressor()
+model_away.load_model('model_away.json')
     
     return model_home, model_away, all_teams, team_to_code
 
