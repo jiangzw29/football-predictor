@@ -6,62 +6,45 @@ from scipy.stats import poisson
 import os
 
 st.set_page_config(page_title="AI 足球预测器 - 完整版", page_icon="⚽")
-st.title("⚽ AI 足球赛前预测器 V7.0 (完整版)")
-st.write("支持中英文球队搜索，数据本地缓存，一键预测胜平负和精确比分！")
+st.title("⚽ AI 足球赛前预测器 V7.5 (完整本地版)")
+st.write("支持中英文球队搜索，本地秒加载模型，一键预测胜平负和精确比分！")
 
-# ================= 中英文球队对照表（精选五大联赛常用队名）=================
+# 中英文球队对照表
 TEAM_MAP = {
-    # 英超
     "曼城": "Man City", "阿森纳": "Arsenal", "利物浦": "Liverpool", "曼联": "Man United",
     "切尔西": "Chelsea", "热刺": "Spurs", "纽卡斯尔": "Newcastle", "阿斯顿维拉": "Aston Villa",
-    "布莱顿": "Brighton", "西汉姆联": "West Ham", "埃弗顿": "Everton", "富勒姆": "Fulham",
+    "布莱顿": "Brighton", "西汉姆": "West Ham", "埃弗顿": "Everton", "富勒姆": "Fulham",
     "水晶宫": "Crystal Palace", "布伦特福德": "Brentford", "狼队": "Wolves", "伯恩茅斯": "Bournemouth",
     "诺丁汉森林": "Nott'm Forest", "卢顿": "Luton", "伯恩利": "Burnley", "谢菲联": "Sheffield United",
-    # 西甲
-    "皇家马德里": "Real Madrid", "巴塞罗那": "Barcelona", "马德里竞技": "Ath Madrid",
-    "塞维利亚": "Sevilla", "皇家社会": "Sociedad", "毕尔巴鄂": "Ath Bilbao", "比利亚雷亚尔": "Villarreal",
-    # 德甲
-    "拜仁慕尼黑": "Bayern Munich", "多特蒙德": "Dortmund", "莱比锡红牛": "RB Leipzig",
-    "勒沃库森": "Leverkusen", "法兰克福": "Ein Frankfurt", "斯图加特": "Stuttgart", "云达不莱梅": "Werder Bremen",
-    # 意甲
-    "国际米兰": "Inter", "AC米兰": "AC Milan", "尤文图斯": "Juventus", "那不勒斯": "Napoli",
-    "罗马": "Roma", "拉齐奥": "Lazio", "亚特兰大": "Atalanta", "佛罗伦萨": "Fiorentina",
-    # 法甲
-    "巴黎圣日耳曼": "Paris SG", "马赛": "Marseille", "里昂": "Lyon", "摩纳哥": "Monaco",
+    "皇马": "Real Madrid", "皇家马德里": "Real Madrid", "巴萨": "Barcelona", "巴塞罗那": "Barcelona", 
+    "马竞": "Ath Madrid", "马德里竞技": "Ath Madrid", "塞维利亚": "Sevilla", "皇家社会": "Sociedad", 
+    "毕尔巴鄂": "Ath Bilbao", "比利亚雷亚尔": "Villarreal",
+    "拜仁": "Bayern Munich", "拜仁慕尼黑": "Bayern Munich", "多特蒙德": "Dortmund", "莱比锡": "RB Leipzig",
+    "勒沃库森": "Leverkusen", "法兰克福": "Ein Frankfurt", "斯图加特": "Stuttgart", "不莱梅": "Werder Bremen", "云达不莱梅": "Werder Bremen",
+    "国米": "Inter", "国际米兰": "Inter", "AC米兰": "AC Milan", "尤文图斯": "Juventus", "尤文": "Juventus", 
+    "那不勒斯": "Napoli", "罗马": "Roma", "拉齐奥": "Lazio", "亚特兰大": "Atalanta", "佛罗伦萨": "Fiorentina",
+    "巴黎圣日耳曼": "Paris SG", "大巴黎": "Paris SG", "马赛": "Marseille", "里昂": "Lyon", "摩纳哥": "Monaco",
     "里尔": "Lille", "朗斯": "Lens", "雷恩": "Rennes", "尼斯": "Nice"
 }
 
 @st.cache_data
 def load_and_cache_data():
-    """下载数据并缓存到本地，防止每次刷新都重新下载"""
-    cache_file = "epl_data_cache.csv"
-    if os.path.exists(cache_file):
-        print("从本地缓存加载数据...")
-        return pd.read_csv(cache_file)
-
-    print("首次运行，正在从网络下载数据...")
-    leagues = {'E0': '英超', 'SP1': '西甲', 'D1': '德甲', 'I1': '意甲', 'F1': '法甲'}
-    seasons = ['2526', '2425', '2424', '2324', '2223']
-    dfs = []
-    for season in seasons:
-        for code, name in leagues.items():
-            url = f"https://www.football-data.co.uk/mmz4281/{season}/{code}.csv"
-            try:
-                d = pd.read_csv(url)
-                if len(d) > 50:
-                    dfs.append(d)
-            except: pass
-    df = pd.concat(dfs, ignore_index=True)
-    df.to_csv(cache_file, index=False)
-    return df
+    # 自动兼容带 .csv 后缀和不带后缀的文件名
+    if os.path.exists("epl_data_cache.csv"):
+        return pd.read_csv("epl_data_cache.csv")
+    elif os.path.exists("epl_data_cache"):
+        return pd.read_csv("epl_data_cache")
+    else:
+        st.error("无法找到数据文件！请检查文件夹里是否存在 epl_data_cache.csv 或 epl_data_cache 文件。")
+        st.stop()
 
 @st.cache_resource
 def load_model():
     df = load_and_cache_data()
+    
+    # 数据清洗和特征工程
     cols_needed = ['B365H', 'B365D', 'B365A', 'B365>2.5', 'B365<2.5', 'AHh', 'B365AHH', 'B365AHA', 'FTHG', 'FTAG']
     df = df.dropna(subset=cols_needed)
-    
-    # 去水处理
     df['Overround'] = 1/df['B365H'] + 1/df['B365D'] + 1/df['B365A']
     df['Prob_H'] = (1 / df['B365H']) / df['Overround']
     df['Prob_D'] = (1 / df['B365D']) / df['Overround']
@@ -73,27 +56,22 @@ def load_model():
     
     all_teams = sorted(list(set(df['HomeTeam'].unique()) | set(df['AwayTeam'].unique())))
     team_to_code = {team: i for i, team in enumerate(all_teams)}
-    df['HomeTeam_Code'] = df['HomeTeam'].map(team_to_code)
-    df['AwayTeam_Code'] = df['AwayTeam'].map(team_to_code)
     
-    features = ['Prob_H', 'Prob_D', 'Prob_A', 'AHh', 'Prob_AH_Home', 'Prob_Over25', 'Prob_Under25', 'HomeTeam_Code', 'AwayTeam_Code']
-    X = df[features]
+    # 直接读取本地已训练好的模型
     model_home = xgb.XGBRegressor()
-model_home.load_model('model_home.json')
-
-model_away = xgb.XGBRegressor()
-model_away.load_model('model_away.json')
+    model_home.load_model('model_home.json')
+    
+    model_away = xgb.XGBRegressor()
+    model_away.load_model('model_away.json')
     
     return model_home, model_away, all_teams, team_to_code
 
-with st.spinner('正在加载模型和数据（第一次会下载，之后秒开）...'):
+with st.spinner('正在加载本地数据与模型（极速加载）...'):
     model_home, model_away, all_teams, team_to_code = load_model()
 
-# ================= 展示所有球队 =================
-with st.expander("📋 点击查看所有可预测球队（英文）"):
+with st.expander("📋 点击查看所有可预测球队（英文真实名称）"):
     st.write(", ".join(all_teams))
 
-# ================= 输入界面 =================
 col1, col2 = st.columns(2)
 with col1:
     home_input = st.text_input("主队 (可输入中文如'曼城'，或英文'Man City')", value="曼城")
@@ -117,7 +95,9 @@ with col5:
     b365_aha = st.number_input("客队让球赔率 (B365AHA)", value=1.90, step=0.01)
 
 if st.button("开始 AI 预测", type="primary", use_container_width=True):
-    # 处理输入，先尝试中英文匹配
+    home_input = home_input.strip()
+    away_input = away_input.strip()
+    
     home_team = TEAM_MAP.get(home_input, home_input)
     away_team = TEAM_MAP.get(away_input, away_input)
     
@@ -126,6 +106,7 @@ if st.button("开始 AI 预测", type="primary", use_container_width=True):
     elif home_team not in team_to_code or away_team not in team_to_code:
         st.error(f"无法识别球队：{home_team} 或 {away_team}。请点击上方展开列表查看准确的英文名。")
     else:
+        # 赔率去水处理
         overround = 1/b365h + 1/b365d + 1/b365a
         prob_h = (1/b365h) / overround
         prob_d = (1/b365d) / overround
@@ -146,6 +127,7 @@ if st.button("开始 AI 预测", type="primary", use_container_width=True):
         
         st.success(f"⚽ AI 预测：{home_input} {lambda_home:.2f} 球，{away_input} {lambda_away:.2f} 球")
         
+        # 泊松分布计算比分概率
         max_goals = 6
         prob_matrix = np.zeros((max_goals + 1, max_goals + 1))
         for i in range(max_goals + 1):
